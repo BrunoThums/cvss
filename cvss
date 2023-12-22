@@ -1,0 +1,162 @@
+import sys
+import requests
+from lxml import html
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QTextEdit, QPushButton, QVBoxLayout, QHBoxLayout, QLabel, QMessageBox, QCheckBox
+from PyQt5.QtGui import QIcon, QPixmap, QFont
+from PyQt5.QtCore import Qt
+import ctypes 
+
+# Tells Windows that this application that python is a host for other applications. Allowing the code to set the image to taskbar application window
+myappid = 'mycompany.myproduct.subproduct.version' # arbitrary string (should be unicode)
+ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+
+class SubstituirLetrasApp(QMainWindow):
+    def __init__(self):
+        super().__init__()
+
+        self.setWindowTitle("CVSS converter")
+        self.setGeometry(100, 100, 600, 400)
+
+        central_widget = QWidget(self)
+        self.setCentralWidget(central_widget)
+
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QVBoxLayout()
+
+        # Adicionar a QCheckBox acima da caixa de texto 1
+        self.checkbox_http = QCheckBox("Requisição HTTPS", self)
+        layout.addWidget(self.checkbox_http)
+        
+        # Imagem de copiar acima da caixa de texto 1
+        btn_copiar = QPushButton("Copiar", self)
+        btn_copiar.clicked.connect(self.copiar_texto)
+        layout.addWidget(btn_copiar)
+
+        self.entrada_texto = QTextEdit(self)
+        self.entrada_texto.setPlaceholderText("Insira o texto aqui")
+        self.entrada_texto.setFont(QFont("Arial", 12))  # Defina a fonte e tamanho desejados
+        layout.addWidget(self.entrada_texto)
+
+        btn_substituir = QPushButton("Substituir", self)
+        btn_substituir.clicked.connect(self.substituir_palavras)
+        layout.addWidget(btn_substituir)
+
+        btn_colar = QPushButton("Colar", self)
+        btn_colar.clicked.connect(self.colar_texto)
+        layout.addWidget(btn_colar)
+
+        self.saida_texto = QTextEdit(self)
+        self.saida_texto.setReadOnly(True)
+        self.saida_texto.setFont(QFont("Arial", 12))  # Defina a fonte e tamanho desejados
+        layout.addWidget(self.saida_texto)
+
+        central_widget = QWidget()
+        central_widget.setLayout(layout)
+        self.setCentralWidget(central_widget)
+
+        # Configurar ícone da aplicação
+        icon = QIcon("cvss.png")  # Substitua pelo caminho do seu ícone
+        self.setWindowIcon(icon)
+
+    def colar_texto(self):
+        clipboard_text = QApplication.clipboard().text()
+        self.entrada_texto.insertPlainText(clipboard_text)
+
+    def copiar_texto(self):
+        clipboard = QApplication.clipboard()
+        clipboard.setText(self.saida_texto.toPlainText())
+        
+    def substituir_letras(self, chave, valor):
+        substituicoes = {
+            '3.1': '',
+            'N': 'Não' if chave != 'VA' else 'Remoto',
+            'L': 'Local' if chave == 'VA' else 'Baixo',
+            'A': 'Adjacente',
+            'P': 'Físico',
+            'H': 'Alto',
+            'R': 'Sim',
+            'U': 'Não',
+            'C': 'Sim',
+            'S': 'AE',
+        }
+        return substituicoes.get(valor, valor)
+
+    def substituir_chaves(self, chave):
+        substituicoes_chaves = {
+            'CVSS': '',
+            'AV': 'VA',
+            'AC': 'CA',
+            'PR': 'RA',
+            'UI': 'IU',
+            'S': 'AE',
+            'C': 'C',
+            'I': 'I',
+            'A': 'D',
+        }
+        return substituicoes_chaves.get(chave, chave)
+
+    def resgatar_cvss(self,https):
+        # Realizar a requisição HTTP e extrair informações
+        url = self.entrada_texto.toPlainText()
+        if not https:
+            url = "https://www.first.org/cvss/calculator/3.1#" + url
+        print("url:",url)
+        try:
+            response = requests.get(url)
+            if response.status_code == 200:
+                tree = html.fromstring(response.content)
+                print("arvore: ", tree)
+                cvss_score = tree.xpath('//span[contains(@id, "baseMetricScore")]/text()')
+                print("tudo: ",cvss_score)
+                if cvss_score:
+                    print("cvss:",cvss_score[0])
+                    return cvss_score
+                else:
+                    return "Erro"
+        except Exception as e:
+            QMessageBox.critical(self, 'Erro', f'Erro ao fazer a requisição: {e}')
+    
+    def substituir_palavras(self):
+        entrada = self.entrada_texto.toPlainText()
+        https = False
+        fazerRequisicao = self.checkbox_http.isChecked()
+        if "https" in entrada:
+            https = True
+            print(entrada.split('/'))
+            entrada = entrada.split('/')
+            conjuntos = entrada[6:]
+            print(conjuntos)
+        else:
+            conjuntos = entrada.split('/')
+        #QMessageBox.critical(self, 'Erro', 'Não há "/" no texto.\nErro: {e}')
+    
+        resultado = []
+        try:
+            for conjunto in conjuntos:
+                chave, valores = conjunto.split(':')
+                chave = self.substituir_chaves(chave)
+                valores = [self.substituir_letras(chave, valor.strip()) for valor in valores.split(',')]
+                resultado.append(f'{chave}:{",".join(valores)}')
+            if not https: resultado = resultado[1:]
+            
+        except Exception as e:
+            print(f"Erro: {e}")
+            QMessageBox.critical(self, 'Erro', f'Não foi possível fazer a conversão.\n\nPossivelmente não há todos valores preenchidos, como, por exemplo o "CVSS:3.1"\nErro: {e}')
+            return
+        if fazerRequisicao:
+            cvss = self.resgatar_cvss(https)
+            if "Erro" not in cvss:
+                print("a")
+                self.saida_texto.setPlainText(cvss+" "+','.join(resultado))
+            else:
+                QMessageBox.critical(self, 'Erro', 'Erro ao resgatar o valor. Verifique o XPath')
+        else: 
+            self.saida_texto.setPlainText(','.join(resultado))
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = SubstituirLetrasApp()
+    window.show()
+    sys.exit(app.exec_())
