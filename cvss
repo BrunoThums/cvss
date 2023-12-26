@@ -61,6 +61,7 @@ class SubstituirLetrasApp(QMainWindow):
         self.setWindowIcon(icon)
 
     def colar_texto(self):
+        self.entrada_texto.clear()
         clipboard_text = QApplication.clipboard().text()
         self.entrada_texto.insertPlainText(clipboard_text)
 
