@@ -68,7 +68,7 @@ class SubstituirLetrasApp(QMainWindow):
         clipboard = QApplication.clipboard()
         clipboard.setText(self.saida_texto.toPlainText())
         
-    def substituir_letras(self, chave, valor):
+    def substituir_letras_ingles(self, chave, valor):
         substituicoes = {
             '3.1': '',
             'N': 'Não' if chave != 'VA' else 'Remoto',
@@ -83,7 +83,24 @@ class SubstituirLetrasApp(QMainWindow):
         }
         return substituicoes.get(valor, valor)
 
-    def substituir_chaves(self, chave):
+    def substituir_letras_portugues(self, chave, valor):
+        substituicoes = {
+            
+            '3.1': '',
+            'Remoto': 'N',
+            'Local':'L',
+            'Adjacente': 'A',
+            'Físico': 'P',
+            'Baixo':'L',
+            'Baixa':'L',
+            'Alto': 'H',
+            'Alta': 'H',
+            'Sim': 'C' if chave == 'S' else 'R',
+            'Não': 'U' if chave == 'S' else 'N',
+        }
+        return substituicoes.get(valor, valor)
+
+    def substituir_chaves_ingles(self, chave):
         substituicoes_chaves = {
             'CVSS': '',
             'AV': 'VA',
@@ -97,6 +114,20 @@ class SubstituirLetrasApp(QMainWindow):
         }
         return substituicoes_chaves.get(chave, chave)
 
+    def substituir_chaves_portugues(self, chave):
+        substituicoes_chaves = {
+            '': 'CVSS',
+            'VA': 'AV',
+            'CA': 'AC',
+            'RA': 'PR',
+            'IU': 'UI',
+            'AE': 'S',
+            'C': 'C',
+            'I': 'I',
+            'D': 'A',
+        }
+        return substituicoes_chaves.get(chave, chave)
+    
     def resgatar_cvss(self,https):
         # Realizar a requisição HTTP e extrair informações
         url = self.entrada_texto.toPlainText()
@@ -124,22 +155,38 @@ class SubstituirLetrasApp(QMainWindow):
         fazerRequisicao = self.checkbox_http.isChecked()
         if "https" in entrada:
             https = True
-            print(entrada.split('/'))
-            entrada = entrada.split('/')
+            entrada = entrada.split('/') if "/" in entrada else entrada.split(',')
             conjuntos = entrada[6:]
             print(conjuntos)
         else:
-            conjuntos = entrada.split('/')
+            conjuntos = entrada.split('/') if "/" in entrada else entrada.split(',')
         #QMessageBox.critical(self, 'Erro', 'Não há "/" no texto.\nErro: {e}')
     
         resultado = []
+        print("conjuntos: ",conjuntos)
+        print("[0]: ", conjuntos[0])
+        if conjuntos[0]=="CVSS:3.1": conjuntos = conjuntos[1:]
+        a, primeiro_conjunto = conjuntos[0].split(":")
+        conjunto_ingles = ["N","A","L","P"]
         try:
-            for conjunto in conjuntos:
-                chave, valores = conjunto.split(':')
-                chave = self.substituir_chaves(chave)
-                valores = [self.substituir_letras(chave, valor.strip()) for valor in valores.split(',')]
-                resultado.append(f'{chave}:{",".join(valores)}')
-            if not https: resultado = resultado[1:]
+            # converter inglês -> português
+            if primeiro_conjunto in conjunto_ingles:
+                for conjunto in conjuntos:
+                    chave, valores = conjunto.split(':')
+                    chave = self.substituir_chaves_ingles(chave)
+                    valores = [self.substituir_letras_ingles(chave, valor.strip()) for valor in valores.split(',')]
+                    resultado.append(f'{chave}:{",".join(valores)}')
+                    ingles = False
+                print("caractere:", resultado)
+            # converter português -> inglês    
+            else:
+                for conjunto in conjuntos:
+                    chave, valores = conjunto.split(':')
+                    chave = self.substituir_chaves_portugues(chave)
+                    valores = [self.substituir_letras_portugues(chave, valor.strip()) for valor in valores.split(',')]
+                    resultado.append(f'{chave}:{",".join(valores)}')
+                    ingles = True
+                print("caractere:", resultado)
             
         except Exception as e:
             print(f"Erro: {e}")
@@ -153,7 +200,16 @@ class SubstituirLetrasApp(QMainWindow):
             else:
                 QMessageBox.critical(self, 'Erro', 'Erro ao resgatar o valor. Verifique o XPath')
         else: 
-            self.saida_texto.setPlainText(','.join(resultado))
+            if ingles == False:
+                self.saida_texto.setPlainText(','.join(resultado))
+            else:
+                url = "https://nvd.nist.gov/vuln-metrics/cvss/v3-calculator?vector="
+                resultado_final = '/'.join(resultado)
+                versao_cvss = '&version=3.0'
+                self.saida_texto.setPlainText(url+resultado_final+versao_cvss)
+                
+                
+            
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
