@@ -154,11 +154,25 @@ class SubstituirLetrasApp(QMainWindow):
         entrada = self.entrada_texto.toPlainText()
         https = False
         fazerRequisicao = self.checkbox_http.isChecked()
-        if "https" in entrada:
+        if "first" in entrada:
+            print("\n\n first \n\n")
             https = True
             entrada = entrada.split('/') if "/" in entrada else entrada.split(',')
             conjuntos = entrada[6:]
             print(conjuntos)
+        elif "nist" in entrada:
+            print("\n\n NIST \n\n")
+            https = True
+            entrada = entrada.split('=')
+            entrada = entrada [1]
+            try: 
+                entrada = entrada.split('&') 
+                print("& ", entrada)
+                entrada = entrada[0]
+            except: 
+                return
+            entrada = entrada.split('/') if "/" in entrada else entrada.split(',')
+            conjuntos = entrada
         else:
             conjuntos = entrada.split('/') if "/" in entrada else entrada.split(',')
         #QMessageBox.critical(self, 'Erro', 'Não há "/" no texto.\nErro: {e}')
